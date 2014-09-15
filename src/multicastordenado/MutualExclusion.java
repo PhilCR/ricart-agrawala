@@ -11,7 +11,7 @@ package multicastordenado;
  *
  * @author Rodrigo
  */
-public class MultiCastOrdenado {
+public class MutualExclusion {
     
     
     /**

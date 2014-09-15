@@ -16,27 +16,27 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 
-/**
- *
- * @author Rodrigo
- */
+
 public class Process implements Runnable{
     
     //Cada processo tem um pid, um clock logico, um array de portas as quais ele se comunica com outros processos e sua propria porta da parte servidor
     private int pid;
     private int clock; 
     private int[] portArray;
+    private int[] resources = {0, 0}; //Simulando dois recursos
     private int port; 
     private ArrayList<Tuple> queue;
-
+    
     //Classe tupla, é utilizada pra inserir mensagens na fila ordenada, contém o processo que enviou a mensagem, o clock logico que veio na mensagem e a mensagem em si
     private class Tuple implements Comparator<Tuple>{
+            public int resource;
             public int pid;
             public int clock;
             public String message;
             
             //Construtor básico
-            public Tuple(int pid, int clock, String message){
+            public Tuple(int resource, int pid, int clock, String message){
+                this.resource = resource;
                 this.pid = pid;
                 this.clock = clock;
                 this.message = message;
@@ -66,13 +66,12 @@ public class Process implements Runnable{
     //Método que roda quando a thread é começa
     public void run() {
         //Cria uma parte servidor
-        Runnable p = new Server();
-        new Thread(p).start();
+        Runnable s = new Server();
+        new Thread(s).start();
         
         //Cria uma parte cliente
-        Runnable r2 = new Client();
-        new Thread(r2).start();
-        
+        Runnable c = new Client();
+        new Thread(c).start();  
         
     }
     
@@ -88,56 +87,63 @@ public class Process implements Runnable{
     
     //Thread do Client
     public class Client implements Runnable {
+        //Simula o incremento do clock
+        public void incrementClock(){
+            clock = clock+1;
+        }
+        
+        //Simula a necessidade de utilizar um recurso
+        public void wantResource(int r){
+            resources[r] = 1;
+        }
+        
+        //Simula a necessidade de não utilizar um recurso
+        public void notwantResource(int r){
+            resources[r] = 0;
+        }
+        
+        //Simula a utilização de um recurso
+        public void usingResource(int r){
+            resources[r] = 2;
+        }
+        
         //Abre um socket para localhost (testamos tudo em um computador) e envia pra porta designada
-        public void send(int port) throws IOException {
-            try (Socket socket = new Socket("127.0.0.1", port)) {
-                //Cria dois streams, um pra enviar e outro pra receber
-                DataOutputStream ostream = new DataOutputStream(socket.getOutputStream());
-                DataInputStream istream = new DataInputStream(socket.getInputStream());
-                
-                //Escreve no stream o pid do processo, o clock logico e a mensagem
-                ostream.writeUTF(pid + "-" + clock + "-" + "MENSAGEM");
-                ostream.flush();
-                
-                //Lê o que volta dos servidores, no caso o ACK sendo recebido.
-                String recv = istream.readUTF();
-                if(recv.length() > 0){
-                    System.out.println("Recebendo ACK: "+recv);
-                    print();
+        public void request(int resource) throws IOException {
+            incrementClock();
+            
+            for (int port : portArray) {
+
+                try (Socket socket = new Socket("127.0.0.1", port)) 
+                {   
+                    //Cria dois streams, um pra enviar e outro pra receber
+                    DataOutputStream ostream = new DataOutputStream(socket.getOutputStream());
+                    DataInputStream istream = new DataInputStream(socket.getInputStream());
+
+                    //Escreve no stream o pid do processo, o clock logico e a mensagem
+                    ostream.writeUTF(resource + "-" + pid + "-" + clock + "-" + "RESQUEST");
+                    ostream.flush();
+
+                    //Lê o que volta dos servidores, no caso o OK sendo recebido.
+                    String recv = istream.readUTF();
+                    if(recv.length() > 0){
+                        System.out.println("Recebendo OK: "+recv);
+                        //print();
+                    }
+                    socket.close();
                 }
-                socket.close();
             }
         }
 
         @Override
         //Método runnable do Client
         public void run() {
-            try {
-                //Ìndica que tá enviando
-                System.out.println(pid + ": Enviando");
-                //Percorre o array de portas e envia mensagem pra todos os outros processos
-                clock = clock+1;
-                for (int i = 0; i < portArray.length; i++) {
-                    send(portArray[i]);
-                }
-                
-                clock = clock+1;
-                for (int i = 0; i < portArray.length; i++) {
-                    send(portArray[i]);
-                }
-
-            } catch (IOException e) {
-                System.err.println(e);
-            }
+            System.out.println(pid + " is up!");
         }
 
     }
     
     //Classe que implementa a thread do Server
     public class Server implements Runnable {
-        
-        
-
         @Override
         //Método runnable do Server
         public void run() {
@@ -145,8 +151,7 @@ public class Process implements Runnable{
             Socket socket = null;
             ServerSocket serverSocket;
 
-            try {
-                
+            try {    
                 serverSocket = new ServerSocket(port);
                 while (true) {
                     //Aceita a conexão
@@ -154,24 +159,36 @@ public class Process implements Runnable{
                     //Também cria dois streams, um pra receber dados e outro pra enviar
                     DataOutputStream ostream = new DataOutputStream(socket.getOutputStream());
                     DataInputStream istream = new DataInputStream(socket.getInputStream());
-
+                    
+                    //Verifica a fila por resources que não esta mais utilizando
+                    
                     //Tokeniza a mensagem em um array de pedaços que será criada uma nova tupla
                     String message = istream.readUTF();
                     String[] tuples = message.split("-");
-
-                    //Adiciona uma nova tupla a fila, separado por pid, clock e mensagem
-                    queue.add(new Tuple(Integer.parseInt(tuples[0]), Integer.parseInt(tuples[1]), tuples[2]));
-                    //Ordena a lista pra saber qual mensagem chegou primeiro de acordo com o clock logico
-                    Collections.sort(queue, new Tuple());
-                    //print();
-                    //System.out.println(tuples[0] + "-" + tuples[1] + "-" + tuples[2]);
-                    //Lamport's timestamp algorithm
+                    
+   
+                    //Lamport's timestamp algorithm:
                     //Atualiza o clock do processo baseado na mensagem que chegou
-                    clock = Integer.max(Integer.parseInt(tuples[0]), clock) + 1;
-                    //Escreve um ACK de resposta e envia de volta ao processo 
-                    ostream.writeUTF(pid + "-" + clock + "-" + "ACK");
+                    clock = Integer.max(Integer.parseInt(tuples[1]), clock) + 1;
+                    
+                    switch(resources[Integer.parseInt(tuples[0])]){
+                        case 0:
+                            break;
+                        case 1:
+                            break;
+                        case 2:
+                            break;
+                        //Adiciona uma nova tupla a fila, separado por pid, clock e mensagem
+                        queue.add(new Tuple(Integer.parseInt(tuples[0]), Integer.parseInt(tuples[1]), Integer.parseInt(tuples[2]), tuples[3]));
+                        //Ordena a lista pra saber qual mensagem chegou primeiro de acordo com o clock logico
+                        Collections.sort(queue, new Tuple());
+                    }
+                    
+                    if()
+                    //Escreve um OK de resposta e envia de volta ao processo 
+                    ostream.writeUTF(tuples[0] + "-" + pid + "-" + clock + "-" + "OK");
                     ostream.flush();
-                        //System.out.println(pid + "-" + clock + "-" + "ACK");
+                    
                     
                 }
             } catch (IOException e) {
