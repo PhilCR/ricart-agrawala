@@ -15,6 +15,8 @@ import java.net.Socket;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 
 public class Process implements Runnable{
@@ -54,6 +56,15 @@ public class Process implements Runnable{
     
     
     //Construtor do processo, recebe os paramêtros da classe e inicializa a fila
+    public Process(int pid, int clock, int port, int[] portArray, int resource){
+        this.pid = pid;
+        this.clock = clock;
+        this.port = port;
+        this.portArray = portArray;
+        this.resources[resource] = 2;
+        queue = new ArrayList<>();
+    }
+    
     public Process(int pid, int clock, int port, int[] portArray){
         this.pid = pid;
         this.clock = clock;
@@ -107,6 +118,11 @@ public class Process implements Runnable{
             resources[r] = 2;
         }
         
+        //Simula a não utilização de um recurso
+        public void stopusingResource(int r){
+            resources[r] = 0;
+        }
+        
         //Abre um socket para localhost (testamos tudo em um computador) e envia pra porta designada
         public void request(int resource) throws IOException {
             incrementClock();
@@ -138,6 +154,12 @@ public class Process implements Runnable{
         //Método runnable do Client
         public void run() {
             System.out.println(pid + " is up!");
+            try {
+                request(0);
+            } catch (IOException ex) {
+                Logger.getLogger(Process.class.getName()).log(Level.SEVERE, null, ex);
+            }
+            
         }
 
     }
@@ -173,21 +195,31 @@ public class Process implements Runnable{
                     
                     switch(resources[Integer.parseInt(tuples[0])]){
                         case 0:
+                            //Escreve um OK de resposta e envia de volta ao processo 
+                            ostream.writeUTF(tuples[0] + "-" + pid + "-" + clock + "-" + "OK");
+                            ostream.flush();
                             break;
                         case 1:
+                            //Confere os timestamps
+                            if ( clock < Integer.parseInt( tuples[2] ) ){
+                                //Adiciona uma nova tupla a fila, separado por pid, clock e mensagem
+                                queue.add(new Tuple(Integer.parseInt(tuples[0]), Integer.parseInt(tuples[1]), Integer.parseInt(tuples[2]), tuples[3]));
+                                //Ordena a lista pra saber qual mensagem chegou primeiro de acordo com o clock logico
+                                Collections.sort(queue, new Tuple());
+                            }else{
+                                //Escreve um OK de resposta e envia de volta ao processo 
+                                ostream.writeUTF(tuples[0] + "-" + pid + "-" + clock + "-" + "OK");
+                                ostream.flush();
+                            }
                             break;
                         case 2:
+                            //Adiciona uma nova tupla a fila, separado por pid, clock e mensagem
+                            queue.add(new Tuple(Integer.parseInt(tuples[0]), Integer.parseInt(tuples[1]), Integer.parseInt(tuples[2]), tuples[3]));
+                            //Ordena a lista pra saber qual mensagem chegou primeiro de acordo com o clock logico
+                            Collections.sort(queue, new Tuple());
                             break;
-                        //Adiciona uma nova tupla a fila, separado por pid, clock e mensagem
-                        queue.add(new Tuple(Integer.parseInt(tuples[0]), Integer.parseInt(tuples[1]), Integer.parseInt(tuples[2]), tuples[3]));
-                        //Ordena a lista pra saber qual mensagem chegou primeiro de acordo com o clock logico
-                        Collections.sort(queue, new Tuple());
+                        
                     }
-                    
-                    if()
-                    //Escreve um OK de resposta e envia de volta ao processo 
-                    ostream.writeUTF(tuples[0] + "-" + pid + "-" + clock + "-" + "OK");
-                    ostream.flush();
                     
                     
                 }

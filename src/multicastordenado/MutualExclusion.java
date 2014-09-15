@@ -31,6 +31,7 @@ public class MutualExclusion {
             Runnable p3 = new Process(3,5, 50002, portArray);
             new Thread(p3).start();
             
+            
         }catch(Exception ex){
             System.out.print(ex.getMessage());
         }        
