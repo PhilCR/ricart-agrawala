@@ -25,10 +25,10 @@ public class MutualExclusion {
             Runnable p1 = new Process(1,2, 50000, portArray);
             new Thread(p1).start();
             
-            Runnable p2 = new Process(2,3, 50001, portArray);
+            Runnable p2 = new Process(2,3, 50001, portArray, 0);
             new Thread(p2).start();
             
-            Runnable p3 = new Process(3,5, 50002, portArray);
+            Runnable p3 = new Process(3,5, 50002, null);
             new Thread(p3).start();
             
             
